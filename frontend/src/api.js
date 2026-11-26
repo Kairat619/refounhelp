@@ -1,5 +1,13 @@
 // Base URL of the FastAPI backend. Empty = same origin (Vite proxy in dev, nginx in Docker).
-const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+// Tolerates common mistakes: missing "https://", trailing slash, or a trailing "/api".
+function normaliseBase(raw) {
+  let url = (raw || '').trim().replace(/\/+$/, '').replace(/\/api$/, '')
+  if (url && !/^https?:\/\//i.test(url)) {
+    url = `${/^(localhost|127\.0\.0\.1)(:|$)/.test(url) ? 'http' : 'https'}://${url}`
+  }
+  return url
+}
+const BASE = normaliseBase(import.meta.env.VITE_API_URL)
 
 function clientId() {
   let id = localStorage.getItem('rh_client_id')

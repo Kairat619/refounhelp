@@ -15,7 +15,17 @@ from .merchants import BY_ID, MERCHANTS
 app = FastAPI(title="RefundHelp Demo API", version="1.0.0",
               description="Demo backend for the RefundHelp business model showcase.")
 
-origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+def _normalise_origin(o: str) -> str:
+    """Accepts 'my-app.vercel.app', 'https://my-app.vercel.app/' etc. and returns a valid origin."""
+    o = o.strip().rstrip("/")
+    if o == "*" or not o:
+        return o
+    if not o.startswith(("http://", "https://")):
+        o = ("http://" if o.startswith(("localhost", "127.0.0.1")) else "https://") + o
+    return o
+
+
+origins = [n for n in (_normalise_origin(o) for o in os.getenv("ALLOWED_ORIGINS", "*").split(",")) if n]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
