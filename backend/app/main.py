@@ -9,11 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from . import business as biz
+from . import i18n
+from .i18n import money, pick_lang, tr
 from .letters import DEFECT_ISSUES, ISSUES, PROTECTION_ISSUES, build_letter
 from .merchants import BY_ID, MERCHANTS
 
-app = FastAPI(title="RefundHelp Demo API", version="1.0.0",
-              description="Demo backend for the RefundHelp business model showcase.")
+app = FastAPI(title="RefundHelp Demo API", version="1.1.0",
+              description="Demo backend for the RefundHelp business model showcase. "
+                          "Send Accept-Language: en | ru | kk to choose the language.")
+
 
 def _normalise_origin(o: str) -> str:
     """Accepts 'my-app.vercel.app', 'https://my-app.vercel.app/' etc. and returns a valid origin."""
@@ -41,13 +45,11 @@ _clients: dict[str, dict] = {}
 _next_id = 1001
 
 IssueType = Literal[tuple(ISSUES.keys())]  # type: ignore[valid-type]
+STEP_ORDER = list(i18n.STEPS.keys())
 
-STEPS = [
-    ("submitted", "Case submitted", "We received your case and documents."),
-    ("authorised", "Authorisation signed", "You allowed RefundHelp to contact the company on your behalf."),
-    ("contacted", "Company contacted", "A Refund Specialist sent a formal request citing the exact rule."),
-    ("negotiating", "Negotiating", "The specialist is following up and escalating where needed."),
-]
+
+def _err(status: int, key: str, lang: str):
+    raise HTTPException(status, tr(i18n.ERRORS[key], lang))
 
 
 def _client(client_id: Optional[str]) -> dict:
@@ -59,6 +61,21 @@ def _client(client_id: Optional[str]) -> dict:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _merchant_out(m: dict, lang: str) -> dict:
+    out = {k: tr(v, lang) for k, v in m.items()}
+    out["category"] = m["category"]
+    out["category_label"] = tr(i18n.CATEGORIES[m["category"]], lang)
+    return out
+
+
+def _window(m: dict, issue: str) -> tuple[int, str]:
+    if issue in DEFECT_ISSUES:
+        return m["defect_days"], "defect"
+    if issue in PROTECTION_ISSUES:
+        return m["protection_days"], "protection"
+    return m["return_days"], "standard"
 
 
 # ------------------------------------------------------------------ general
@@ -73,36 +90,42 @@ def health():
 
 
 @app.get("/api/plans")
-def plans():
-    return {"currency": biz.CURRENCY, "plans": biz.PLANS,
-            "min_specialist_order": biz.MIN_SPECIALIST_ORDER}
+def plans(accept_language: Optional[str] = Header(None)):
+    lang = pick_lang(accept_language)
+    return {"currency": biz.CURRENCY, "min_specialist_order": biz.MIN_SPECIALIST_ORDER,
+            "plans": [{k: tr(v, lang) for k, v in p.items()} for p in i18n.PLANS]}
 
 
 @app.get("/api/issues")
-def issues():
-    return [{"id": k, "label": v["en"]} for k, v in ISSUES.items()]
+def issues(accept_language: Optional[str] = Header(None)):
+    lang = pick_lang(accept_language)
+    return [{"id": k, "label": tr(v, lang)} for k, v in ISSUES.items()]
 
 
 # ------------------------------------------------------------------ policy database
 @app.get("/api/merchants")
-def list_merchants(q: str = "", category: str = ""):
+def list_merchants(q: str = "", category: str = "", accept_language: Optional[str] = Header(None)):
+    lang = pick_lang(accept_language)
     ql = q.lower().strip()
     out = []
     for m in MERCHANTS:
         if category and m["category"] != category:
             continue
-        if ql and ql not in m["name"].lower() and ql not in m["category"].lower():
+        cat_names = [v.lower() for v in i18n.CATEGORIES[m["category"]].values()]
+        if ql and ql not in m["name"].lower() and not any(ql in c for c in cat_names):
             continue
-        out.append(m)
-    return {"categories": sorted({m["category"] for m in MERCHANTS}), "items": out}
+        out.append(_merchant_out(m, lang))
+    cats = sorted({m["category"] for m in MERCHANTS})
+    return {"categories": [{"id": c, "label": tr(i18n.CATEGORIES[c], lang)} for c in cats], "items": out}
 
 
 @app.get("/api/merchants/{merchant_id}")
-def get_merchant(merchant_id: str):
+def get_merchant(merchant_id: str, accept_language: Optional[str] = Header(None)):
+    lang = pick_lang(accept_language)
     m = BY_ID.get(merchant_id)
     if not m:
-        raise HTTPException(404, "Merchant not found")
-    return m
+        _err(404, "merchant", lang)
+    return _merchant_out(m, lang)
 
 
 # ------------------------------------------------------------------ self-service check
@@ -116,55 +139,47 @@ class CheckIn(BaseModel):
 
 
 @app.post("/api/check")
-def check(body: CheckIn, x_client_id: Optional[str] = Header(None)):
+def check(body: CheckIn, x_client_id: Optional[str] = Header(None),
+          accept_language: Optional[str] = Header(None)):
+    lang = pick_lang(accept_language)
     m = BY_ID.get(body.merchant_id)
     if not m:
-        raise HTTPException(404, "Merchant not found")
+        _err(404, "merchant", lang)
     if body.purchase_date > date.today():
-        raise HTTPException(422, "Purchase date cannot be in the future")
+        _err(422, "future_date", lang)
 
-    if body.issue_type in DEFECT_ISSUES:
-        window, basis = m["defect_days"], "defect / wrong item rule"
-    elif body.issue_type in PROTECTION_ISSUES:
-        window, basis = m["protection_days"], "buyer protection / cancellation rule"
-    else:
-        window, basis = m["return_days"], "standard return rule"
-
+    window, basis = _window(m, body.issue_type)
     deadline = body.purchase_date + timedelta(days=window)
     days_left = (deadline - date.today()).days
     within = days_left >= 0
 
     complexity = "complex" if (m["difficulty"] == "hard" or not within) else "standard"
     fee_rate = biz.success_fee_rate(complexity)
-    specialist_available = body.amount >= biz.MIN_SPECIALIST_ORDER
     plus = _client(x_client_id)["plus"] if x_client_id else False
 
     if within and m["difficulty"] != "hard":
         recommendation = "self_service"
-        message = "You are inside the deadline. Send the message below yourself — most cases like this are solved without a specialist."
     elif within:
         recommendation = "self_service_then_specialist"
-        message = "You are inside the deadline, but this company often delays or refuses. Send the message first; escalate if there is no answer in 3 business days."
     else:
         recommendation = "specialist"
-        message = "The standard deadline has passed. A specialist may still recover the money using consumer law or a card chargeback."
 
     args = dict(merchant=m["name"], issue=body.issue_type, order_id=body.order_id,
                 amount=body.amount, purchase_date=body.purchase_date.strftime("%d.%m.%Y"),
                 details=body.details.strip(), deadline=deadline.strftime("%d.%m.%Y"))
     return {
-        "merchant": {"id": m["id"], "name": m["name"], "contact": m["contact"],
-                     "refund_time": m["refund_time"], "tips": m["tips"]},
+        "merchant": {"id": m["id"], "name": m["name"], "contact": tr(m["contact"], lang),
+                     "refund_time": tr(m["refund_time"], lang), "tips": tr(m["tips"], lang)},
         "within_deadline": within,
-        "rule_basis": basis,
+        "rule_basis": tr(i18n.RULE_BASIS[basis], lang),
         "window_days": window,
         "deadline": deadline.isoformat(),
         "days_left": days_left,
         "recommendation": recommendation,
-        "message": message,
-        "letters": {"en": build_letter("en", **args), "ru": build_letter("ru", **args)},
+        "message": tr(i18n.MESSAGES[recommendation], lang),
+        "letters": {code: build_letter(code, **args) for code in i18n.LANGS},
         "specialist": {
-            "available": specialist_available,
+            "available": body.amount >= biz.MIN_SPECIALIST_ORDER,
             "min_order": biz.MIN_SPECIALIST_ORDER,
             "complexity": complexity,
             "fee_rate": fee_rate,
@@ -182,8 +197,7 @@ class PlusIn(BaseModel):
 @app.get("/api/me")
 def me(x_client_id: Optional[str] = Header(None)):
     c = _client(x_client_id)
-    used = _plus_cases_this_month(x_client_id)
-    return {"plus": c["plus"], "plus_cases_used": used,
+    return {"plus": c["plus"], "plus_cases_used": _plus_cases_this_month(x_client_id),
             "plus_cases_limit": biz.PLUS_FREE_CASES_PER_MONTH}
 
 
@@ -213,25 +227,44 @@ class CaseIn(BaseModel):
     authorised: bool
 
 
-def _public(case: dict) -> dict:
-    return {k: v for k, v in case.items() if k != "client_id"}
+def _render_event(e: dict, case: dict, lang: str) -> dict:
+    s = e["status"]
+    if s in i18n.STEPS:
+        title, text = i18n.STEPS[s]
+        return {"status": s, "title": tr(title, lang), "text": tr(text, lang), "at": e["at"]}
+    if s == "resolved":
+        partial = case["outcome"] == "partial_refund"
+        fee = (tr(i18n.RESULT["fee_plus"], lang) if case["fee_waived"] else
+               tr(i18n.RESULT["fee"], lang).format(pct=round(case["fee_rate"] * 100), fee=money(case["fee_charged"])))
+        return {"status": s, "at": e["at"],
+                "title": tr(i18n.RESULT["partial_title" if partial else "full_title"], lang),
+                "text": tr(i18n.RESULT["refunded"], lang).format(amount=money(case["refunded_amount"]), fee=fee)}
+    return {"status": s, "at": e["at"], "title": tr(i18n.RESULT["closed_title"], lang),
+            "text": tr(i18n.RESULT["closed_text"], lang)}
+
+
+def _public(case: dict, lang: str) -> dict:
+    out = {k: v for k, v in case.items() if k not in ("client_id", "timeline")}
+    out["issue_label"] = tr(ISSUES[case["issue_type"]], lang)
+    out["timeline"] = [_render_event(e, case, lang) for e in case["timeline"]]
+    return out
 
 
 @app.post("/api/cases", status_code=201)
-def create_case(body: CaseIn, x_client_id: Optional[str] = Header(None)):
+def create_case(body: CaseIn, x_client_id: Optional[str] = Header(None),
+                accept_language: Optional[str] = Header(None)):
     global _next_id
+    lang = pick_lang(accept_language)
     client = _client(x_client_id)
     m = BY_ID.get(body.merchant_id)
     if not m:
-        raise HTTPException(404, "Merchant not found")
+        _err(404, "merchant", lang)
     if body.amount < biz.MIN_SPECIALIST_ORDER:
-        raise HTTPException(422, f"Specialist Service is available for orders above "
-                                 f"{biz.MIN_SPECIALIST_ORDER:,} KZT. Please use the free self-service tools.")
+        _err(422, "min_order", lang)
     if not body.authorised:
-        raise HTTPException(422, "You must authorise RefundHelp to contact the company on your behalf.")
+        _err(422, "authorise", lang)
 
-    window = m["defect_days"] if body.issue_type in DEFECT_ISSUES else (
-        m["protection_days"] if body.issue_type in PROTECTION_ISSUES else m["return_days"])
+    window, _ = _window(m, body.issue_type)
     late = (body.purchase_date + timedelta(days=window)) < date.today()
     complexity = "complex" if (m["difficulty"] == "hard" or late) else "standard"
     fee_rate = biz.success_fee_rate(complexity)
@@ -244,67 +277,61 @@ def create_case(body: CaseIn, x_client_id: Optional[str] = Header(None)):
         case = {
             "id": cid, "client_id": x_client_id, "created_at": now,
             "merchant_id": m["id"], "merchant_name": m["name"], "merchant_logo": m["logo"],
-            "issue_type": body.issue_type, "issue_label": ISSUES[body.issue_type]["en"],
+            "issue_type": body.issue_type,
             "purchase_date": body.purchase_date.isoformat(), "order_id": body.order_id,
             "amount": body.amount, "details": body.details, "customer_name": body.customer_name,
             "complexity": complexity, "fee_rate": 0 if waived else fee_rate, "fee_waived": waived,
             "status": "submitted", "outcome": None, "refunded_amount": 0, "fee_charged": 0,
-            "timeline": [{"status": "submitted", "title": STEPS[0][1], "text": STEPS[0][2], "at": now}],
+            "timeline": [{"status": "submitted", "at": now}],
         }
         _cases[cid] = case
-    return _public(case)
+    return _public(case, lang)
 
 
 @app.get("/api/cases")
-def list_cases(x_client_id: Optional[str] = Header(None)):
+def list_cases(x_client_id: Optional[str] = Header(None), accept_language: Optional[str] = Header(None)):
+    lang = pick_lang(accept_language)
     _client(x_client_id)
-    items = [_public(c) for c in _cases.values() if c["client_id"] == x_client_id]
+    items = [_public(c, lang) for c in _cases.values() if c["client_id"] == x_client_id]
     return sorted(items, key=lambda c: c["created_at"], reverse=True)
 
 
-@app.get("/api/cases/{case_id}")
-def get_case(case_id: str, x_client_id: Optional[str] = Header(None)):
+def _own_case(case_id: str, client_id: Optional[str], lang: str) -> dict:
     c = _cases.get(case_id)
-    if not c or c["client_id"] != x_client_id:
-        raise HTTPException(404, "Case not found")
-    return _public(c)
+    if not c or c["client_id"] != client_id:
+        _err(404, "case", lang)
+    return c
+
+
+@app.get("/api/cases/{case_id}")
+def get_case(case_id: str, x_client_id: Optional[str] = Header(None),
+             accept_language: Optional[str] = Header(None)):
+    lang = pick_lang(accept_language)
+    return _public(_own_case(case_id, x_client_id, lang), lang)
 
 
 @app.post("/api/cases/{case_id}/advance")
-def advance_case(case_id: str, x_client_id: Optional[str] = Header(None)):
+def advance_case(case_id: str, x_client_id: Optional[str] = Header(None),
+                 accept_language: Optional[str] = Header(None)):
     """Demo only: simulates the specialist moving the case to the next step."""
-    c = _cases.get(case_id)
-    if not c or c["client_id"] != x_client_id:
-        raise HTTPException(404, "Case not found")
+    lang = pick_lang(accept_language)
+    c = _own_case(case_id, x_client_id, lang)
     if c["outcome"]:
-        raise HTTPException(409, "Case is already closed")
-    order = [s[0] for s in STEPS]
+        _err(409, "closed", lang)
     with _lock:
-        idx = order.index(c["status"])
-        if idx < len(STEPS) - 1:
-            key, title, text = STEPS[idx + 1]
-            c["status"] = key
-            c["timeline"].append({"status": key, "title": title, "text": text, "at": _now()})
-        else:
+        idx = STEP_ORDER.index(c["status"])
+        if idx < len(STEP_ORDER) - 1:
+            c["status"] = STEP_ORDER[idx + 1]
+        elif random.random() < biz.SPECIALIST_SUCCESS_RATE:
             # Outcome reflects the report's 80% target success rate.
-            if random.random() < biz.SPECIALIST_SUCCESS_RATE:
-                partial = random.random() < 0.2
-                refunded = round(c["amount"] * (0.6 if partial else 1.0))
-                fee = round(refunded * c["fee_rate"])
-                c.update(status="resolved", outcome="partial_refund" if partial else "full_refund",
-                         refunded_amount=refunded, fee_charged=fee)
-                fee_txt = ("Covered by RefundHelp Plus — no fee." if c["fee_waived"]
-                           else f"Success fee {round(c['fee_rate'] * 100)}%: {fee:,} KZT.")
-                c["timeline"].append({"status": "resolved",
-                                      "title": "Partial refund received" if partial else "Refund received",
-                                      "text": f"{refunded:,} KZT returned to your original payment method. {fee_txt}",
-                                      "at": _now()})
-            else:
-                c.update(status="closed", outcome="no_refund")
-                c["timeline"].append({"status": "closed", "title": "Closed without refund",
-                                      "text": "The company refused after all escalation steps. No Refund, No Fee — you pay nothing.",
-                                      "at": _now()})
-    return _public(c)
+            partial = random.random() < 0.2
+            refunded = round(c["amount"] * (0.6 if partial else 1.0))
+            c.update(status="resolved", outcome="partial_refund" if partial else "full_refund",
+                     refunded_amount=refunded, fee_charged=round(refunded * c["fee_rate"]))
+        else:
+            c.update(status="closed", outcome="no_refund")
+        c["timeline"].append({"status": c["status"], "at": _now()})
+    return _public(c, lang)
 
 
 # ------------------------------------------------------------------ business model

@@ -2,34 +2,36 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, Inbox } from 'lucide-react'
 import { api, kzt } from '../api'
+import { useI18n } from '../i18n.jsx'
 import { ErrorBox, PageHeader, Spinner, StatusChip } from '../components/ui'
 
 export default function Cases() {
+  const { t, lang } = useI18n()
   const [cases, setCases] = useState(null)
   const [error, setError] = useState(null)
-  useEffect(() => { api.cases().then(setCases).catch(setError) }, [])
+  useEffect(() => { setError(null); api.cases().then(setCases).catch(setError) }, [lang])
 
   const recovered = cases?.reduce((s, c) => s + c.refunded_amount, 0) || 0
   const fees = cases?.reduce((s, c) => s + c.fee_charged, 0) || 0
 
   return (
     <>
-      <PageHeader eyebrow="Specialist Service" title="My cases">Follow every escalated case step by step.</PageHeader>
+      <PageHeader eyebrow={t('cases.eyebrow')} title={t('cases.title')}>{t('cases.sub')}</PageHeader>
       <div className="mx-auto max-w-4xl px-4 py-8">
         <ErrorBox error={error} />
         {!cases && !error && <Spinner />}
         {cases && cases.length === 0 && (
           <div className="card p-10 text-center">
             <Inbox className="mx-auto h-8 w-8 text-slate-400" />
-            <p className="mt-3 font-medium text-slate-700">No cases yet</p>
-            <p className="mt-1 text-sm text-slate-500">Check a refund first, then escalate it if the company does not cooperate.</p>
-            <Link to="/check" className="btn-primary mt-5">Check my refund</Link>
+            <p className="mt-3 font-medium text-slate-700">{t('cases.emptyTitle')}</p>
+            <p className="mt-1 text-sm text-slate-500">{t('cases.emptySub')}</p>
+            <Link to="/check" className="btn-primary mt-5">{t('cases.checkButton')}</Link>
           </div>
         )}
         {cases && cases.length > 0 && (
           <>
             <div className="mb-6 grid grid-cols-3 gap-4">
-              {[['Cases', cases.length], ['Recovered', kzt(recovered)], ['Fees paid', kzt(fees)]].map(([k, v]) => (
+              {[[t('cases.stats.cases'), cases.length], [t('cases.stats.recovered'), kzt(recovered)], [t('cases.stats.fees'), kzt(fees)]].map(([k, v]) => (
                 <div key={k} className="card p-4"><p className="text-xs text-slate-500">{k}</p><p className="mt-1 text-xl font-bold text-ink">{v}</p></div>
               ))}
             </div>

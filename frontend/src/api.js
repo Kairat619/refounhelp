@@ -9,6 +9,15 @@ function normaliseBase(raw) {
 }
 const BASE = normaliseBase(import.meta.env.VITE_API_URL)
 
+import { getLang } from './i18n.jsx'
+import en from './locales/en.js'
+import ru from './locales/ru.js'
+import kk from './locales/kk.js'
+
+const MSG = { en, ru, kk }
+const msg = (key, vars = {}) =>
+  MSG[getLang()].common[key].replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
+
 function clientId() {
   let id = localStorage.getItem('rh_client_id')
   if (!id) {
@@ -23,26 +32,24 @@ async function request(path, { method = 'GET', body } = {}) {
   try {
     res = await fetch(`${BASE}/api${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json', 'X-Client-Id': clientId() },
+      headers: { 'Content-Type': 'application/json', 'X-Client-Id': clientId(), 'Accept-Language': getLang() },
       body: body ? JSON.stringify(body) : undefined,
     })
   } catch {
-    throw new Error(`Cannot reach the RefundHelp API at ${BASE || window.location.origin}. Check that the backend is running and CORS allows this site.`)
+    throw new Error(msg('apiUnreachable', { base: BASE || window.location.origin }))
   }
   // If the API URL is wrong (e.g. VITE_API_URL not set on Vercel), the request
   // hits the SPA and returns index.html instead of JSON — fail loudly.
   if (!(res.headers.get('content-type') || '').includes('application/json')) {
     throw new Error(
-      BASE
-        ? `The API at ${BASE} did not return JSON (status ${res.status}). Check the VITE_API_URL value.`
-        : 'API not configured: set VITE_API_URL to the backend URL in Vercel and redeploy.',
+      BASE ? msg('apiNotJson', { base: BASE, status: res.status }) : msg('apiNotConfigured'),
     )
   }
   const data = await res.json()
   if (!res.ok) {
     const d = data.detail
-    const msg = Array.isArray(d) ? d.map((e) => e.msg).join('; ') : d || `Request failed (${res.status})`
-    throw new Error(msg)
+    const text = Array.isArray(d) ? d.map((e) => e.msg).join('; ') : d || msg('requestFailed', { status: res.status })
+    throw new Error(text)
   }
   return data
 }

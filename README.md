@@ -22,6 +22,13 @@ A showcase app for the **RefundHelp** business model: a refund-assistance servic
 | `/pricing` | Three tiers + demo toggle for **RefundHelp Plus** (2 fee-free cases / month) |
 | `/business` | Live financial model: scenarios (300/500/700 cases), break-even (≈639 cases), payback, funnel, specialist workload |
 
+### Languages
+
+The app is available in **English, Russian and Kazakh** (switcher **EN · RU · KZ** in the header; the choice is saved in
+the browser). Interface texts live in [`frontend/src/locales/`](frontend/src/locales) (`en.js`, `ru.js`, `kk.js`). The
+backend returns store rules, plans, case timelines and errors in the language sent in the `Accept-Language` header
+(`en`, `ru`, `kk`; `kz` also works). Refund letters are always generated in all three languages.
+
 Business rules from the report (20,000 KZT minimum order, fee rates, Plus price, fixed and variable costs…) all live in
 [`backend/app/business.py`](backend/app/business.py).
 

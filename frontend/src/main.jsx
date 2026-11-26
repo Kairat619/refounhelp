@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import './index.css'
+import { I18nProvider } from './i18n.jsx'
 import Layout from './components/Layout.jsx'
 import Home from './pages/Home.jsx'
 import Policies from './pages/Policies.jsx'
@@ -15,6 +16,7 @@ import NotFound from './pages/NotFound.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
+    <I18nProvider>
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
@@ -30,5 +32,6 @@ createRoot(document.getElementById('root')).render(
         </Route>
       </Routes>
     </BrowserRouter>
+    </I18nProvider>
   </StrictMode>,
 )

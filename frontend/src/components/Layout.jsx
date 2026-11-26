@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Menu, X } from 'lucide-react'
+import { LanguageSwitcher, useI18n } from '../i18n.jsx'
 
 const NAV = [
-  ['/policies', 'Policy database'],
-  ['/check', 'Check my refund'],
-  ['/cases', 'My cases'],
-  ['/pricing', 'Pricing'],
-  ['/business', 'Business model'],
+  ['/policies', 'policies'],
+  ['/check', 'check'],
+  ['/cases', 'cases'],
+  ['/pricing', 'pricing'],
+  ['/business', 'business'],
 ]
 
 export function Logo() {
@@ -22,32 +23,34 @@ export function Logo() {
 }
 
 export default function Layout() {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
   useEffect(() => { setOpen(false); window.scrollTo(0, 0) }, [pathname])
 
   const link = ({ isActive }) =>
-    `rounded-lg px-3 py-2 text-sm font-medium transition ${isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:text-ink'}`
+    `whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-medium transition ${isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:text-ink'}`
 
   return (
     <div className="flex min-h-screen flex-col">
-      <div className="bg-ink px-4 py-1.5 text-center text-xs text-slate-300">
-        Demo app for a student business-model project · all merchants and policies are fictional
-      </div>
+      <div className="bg-ink px-4 py-1.5 text-center text-xs text-slate-300">{t('common.banner')}</div>
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4">
           <Logo />
-          <nav className="hidden items-center gap-1 md:flex">
-            {NAV.map(([to, label]) => <NavLink key={to} to={to} className={link}>{label}</NavLink>)}
+          <nav className="hidden items-center gap-0.5 lg:flex">
+            {NAV.map(([to, key]) => <NavLink key={to} to={to} className={link}>{t(`common.nav.${key}`)}</NavLink>)}
           </nav>
-          <Link to="/check" className="btn-primary hidden md:inline-flex">Get my money back</Link>
-          <button className="md:hidden" onClick={() => setOpen(!open)} aria-label="Menu">
-            {open ? <X /> : <Menu />}
-          </button>
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher />
+            <Link to="/check" className="btn-primary hidden whitespace-nowrap xl:inline-flex">{t('common.cta')}</Link>
+            <button className="lg:hidden" onClick={() => setOpen(!open)} aria-label={t('common.menu')}>
+              {open ? <X /> : <Menu />}
+            </button>
+          </div>
         </div>
         {open && (
-          <nav className="flex flex-col gap-1 border-t border-slate-200 px-4 py-3 md:hidden">
-            {NAV.map(([to, label]) => <NavLink key={to} to={to} className={link}>{label}</NavLink>)}
+          <nav className="flex flex-col gap-1 border-t border-slate-200 px-4 py-3 lg:hidden">
+            {NAV.map(([to, key]) => <NavLink key={to} to={to} className={link}>{t(`common.nav.${key}`)}</NavLink>)}
           </nav>
         )}
       </header>
@@ -58,17 +61,17 @@ export default function Layout() {
         <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 text-sm text-slate-500 md:grid-cols-3">
           <div>
             <Logo />
-            <p className="mt-3">Helping people in Kazakhstan recover money from online purchases, bookings and subscriptions. No Refund, No Fee.</p>
+            <p className="mt-3">{t('common.footer.tagline')}</p>
           </div>
           <div>
-            <p className="font-semibold text-slate-700">Product</p>
+            <p className="font-semibold text-slate-700">{t('common.footer.product')}</p>
             <ul className="mt-2 space-y-1">
-              {NAV.map(([to, label]) => <li key={to}><Link className="hover:text-ink" to={to}>{label}</Link></li>)}
+              {NAV.map(([to, key]) => <li key={to}><Link className="hover:text-ink" to={to}>{t(`common.nav.${key}`)}</Link></li>)}
             </ul>
           </div>
           <div>
-            <p className="font-semibold text-slate-700">About this demo</p>
-            <p className="mt-2">Built to showcase the RefundHelp business model by Kanatova Alina, Saken Midina, Kayrat Zhansaya and Amirmohammad Shadkam. Data resets when the server restarts. Not legal advice.</p>
+            <p className="font-semibold text-slate-700">{t('common.footer.aboutTitle')}</p>
+            <p className="mt-2">{t('common.footer.about')}</p>
           </div>
         </div>
       </footer>

@@ -28,43 +28,7 @@ SPECIALIST_SUCCESS_RATE = 0.80
 MAX_MINUTES_PER_CASE = 35
 MAX_CAC = 2_400
 
-PLANS = [
-    {
-        "id": "free",
-        "name": "Free Self-Service",
-        "price": "Free",
-        "highlight": False,
-        "features": [
-            "Search the return-policy database",
-            "Check your return deadline",
-            "Generate a personalised refund message (EN / RU)",
-        ],
-    },
-    {
-        "id": "specialist",
-        "name": "Specialist Service",
-        "price": "15%–20% of the recovered amount",
-        "note": "Charged only after a successful refund. Orders above 20,000 KZT.",
-        "highlight": True,
-        "features": [
-            "A Refund Specialist contacts the company for you",
-            "Escalation with platform rules, consumer law or chargeback",
-            "Live case tracking",
-            "No Refund, No Fee",
-        ],
-    },
-    {
-        "id": "plus",
-        "name": "RefundHelp Plus",
-        "price": "2,990 KZT / month or 24,990 KZT / year",
-        "highlight": False,
-        "features": [
-            "Up to 2 specialist cases per month with no success fee",
-            "Priority handling",
-            "Return-deadline reminders",
-        ],
-    },
-]
+# Plan names and features (translated) live in i18n.PLANS.
 
 
 def success_fee_rate(complexity: str) -> float:

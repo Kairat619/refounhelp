@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Check, Copy, LoaderCircle } from 'lucide-react'
+import { useI18n } from '../i18n.jsx'
 
 export function PageHeader({ eyebrow, title, children }) {
   return (
@@ -13,10 +14,11 @@ export function PageHeader({ eyebrow, title, children }) {
   )
 }
 
-export function Spinner({ label = 'Loading…' }) {
+export function Spinner({ label }) {
+  const { t } = useI18n()
   return (
     <div className="flex items-center justify-center gap-2 py-16 text-slate-500">
-      <LoaderCircle className="h-5 w-5 animate-spin" /> {label}
+      <LoaderCircle className="h-5 w-5 animate-spin" /> {label || t('common.loading')}
     </div>
   )
 }
@@ -27,16 +29,18 @@ export function ErrorBox({ error }) {
 }
 
 const DIFF = {
-  easy: ['Easy', 'bg-emerald-100 text-emerald-700'],
-  medium: ['Medium', 'bg-amber-100 text-amber-700'],
-  hard: ['Often refuses', 'bg-rose-100 text-rose-700'],
+  easy: 'bg-emerald-100 text-emerald-700',
+  medium: 'bg-amber-100 text-amber-700',
+  hard: 'bg-rose-100 text-rose-700',
 }
 export function Difficulty({ level }) {
-  const [label, cls] = DIFF[level] || DIFF.medium
-  return <span className={`chip ${cls}`}>{label}</span>
+  const { t } = useI18n()
+  const key = DIFF[level] ? level : 'medium'
+  return <span className={`chip ${DIFF[key]}`}>{t(`common.difficulty.${key}`)}</span>
 }
 
 export function CopyButton({ text }) {
+  const { t } = useI18n()
   const [done, setDone] = useState(false)
   return (
     <button
@@ -47,20 +51,21 @@ export function CopyButton({ text }) {
         setTimeout(() => setDone(false), 1500)
       }}
     >
-      {done ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {done ? 'Copied' : 'Copy'}
+      {done ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {done ? t('common.copied') : t('common.copy')}
     </button>
   )
 }
 
 const STATUS = {
-  submitted: ['Submitted', 'bg-slate-100 text-slate-700'],
-  authorised: ['Authorised', 'bg-sky-100 text-sky-700'],
-  contacted: ['Company contacted', 'bg-indigo-100 text-indigo-700'],
-  negotiating: ['Negotiating', 'bg-amber-100 text-amber-700'],
-  resolved: ['Refunded', 'bg-emerald-100 text-emerald-700'],
-  closed: ['Closed – no fee', 'bg-rose-100 text-rose-700'],
+  submitted: 'bg-slate-100 text-slate-700',
+  authorised: 'bg-sky-100 text-sky-700',
+  contacted: 'bg-indigo-100 text-indigo-700',
+  negotiating: 'bg-amber-100 text-amber-700',
+  resolved: 'bg-emerald-100 text-emerald-700',
+  closed: 'bg-rose-100 text-rose-700',
 }
 export function StatusChip({ status }) {
-  const [label, cls] = STATUS[status] || STATUS.submitted
-  return <span className={`chip ${cls}`}>{label}</span>
+  const { t } = useI18n()
+  const key = STATUS[status] ? status : 'submitted'
+  return <span className={`chip ${STATUS[key]}`}>{t(`common.status.${key}`)}</span>
 }

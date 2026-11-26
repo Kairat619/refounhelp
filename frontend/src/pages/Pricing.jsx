@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check } from 'lucide-react'
 import { api } from '../api'
+import { useI18n } from '../i18n.jsx'
 import { ErrorBox, PageHeader, Spinner } from '../components/ui'
 
 export default function Pricing() {
+  const { t, lang } = useI18n()
   const [plans, setPlans] = useState(null)
   const [me, setMe] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    setError(null)
     api.plans().then((d) => setPlans(d.plans)).catch(setError)
     api.me().then(setMe).catch(setError)
-  }, [])
+  }, [lang])
 
   async function togglePlus() {
     try { setMe(await api.setPlus(!me.plus)) } catch (e) { setError(e) }
@@ -20,9 +23,7 @@ export default function Pricing() {
 
   return (
     <>
-      <PageHeader eyebrow="Pricing" title="Pay only when you get your money back">
-        Start free. Bring in a specialist when a company refuses. Subscribe if you shop online often.
-      </PageHeader>
+      <PageHeader eyebrow={t('pricing.eyebrow')} title={t('pricing.title')}>{t('pricing.sub')}</PageHeader>
       <div className="mx-auto max-w-6xl px-4 py-10">
         <ErrorBox error={error} />
         {!plans ? <Spinner /> : (
@@ -31,7 +32,7 @@ export default function Pricing() {
               const isPlus = p.id === 'plus'
               return (
                 <div key={p.id} className={`card relative flex flex-col p-6 ${p.highlight ? 'border-2 border-brand-600 shadow-lg' : ''}`}>
-                  {p.highlight && <span className="chip absolute -top-3 left-6 bg-brand-600 text-white">Most used</span>}
+                  {p.highlight && <span className="chip absolute -top-3 left-6 bg-brand-600 text-white">{t('pricing.mostUsed')}</span>}
                   <p className="font-semibold text-ink">{p.name}</p>
                   <p className="mt-3 text-2xl font-bold text-ink">{p.price}</p>
                   {p.note && <p className="mt-1 text-sm text-slate-500">{p.note}</p>}
@@ -41,14 +42,14 @@ export default function Pricing() {
                   {isPlus ? (
                     <div className="mt-6">
                       <button onClick={togglePlus} disabled={!me} className={me?.plus ? 'btn-ghost w-full' : 'btn-primary w-full'}>
-                        {me?.plus ? 'Cancel Plus (demo)' : 'Activate Plus (demo)'}
+                        {me?.plus ? t('pricing.cancel') : t('pricing.activate')}
                       </button>
-                      {me?.plus && <p className="mt-2 text-center text-xs text-emerald-700">Plus active · {me.plus_cases_used}/{me.plus_cases_limit} fee-free cases used this month</p>}
-                      <p className="mt-2 text-center text-xs text-slate-400">No payment is taken in this demo.</p>
+                      {me?.plus && <p className="mt-2 text-center text-xs text-emerald-700">{t('pricing.active', { used: me.plus_cases_used, limit: me.plus_cases_limit })}</p>}
+                      <p className="mt-2 text-center text-xs text-slate-400">{t('pricing.noPayment')}</p>
                     </div>
                   ) : (
                     <Link to="/check" className={`${p.highlight ? 'btn-primary' : 'btn-ghost'} mt-6 w-full`}>
-                      {p.id === 'free' ? 'Start for free' : 'Check my case'}
+                      {p.id === 'free' ? t('pricing.startFree') : t('pricing.checkCase')}
                     </Link>
                   )}
                 </div>
@@ -58,11 +59,12 @@ export default function Pricing() {
         )}
 
         <div className="card mt-10 p-6">
-          <h2 className="font-semibold text-ink">How the success fee is set</h2>
+          <h2 className="font-semibold text-ink">{t('pricing.feeTitle')}</h2>
           <div className="mt-4 grid gap-4 text-sm text-slate-600 md:grid-cols-3">
-            <p><span className="font-semibold text-ink">15% — standard case.</span> A clear rule was broken and you are inside the deadline.</p>
-            <p><span className="font-semibold text-ink">20% — complex case.</span> The company often refuses, the deadline has passed, or a card chargeback is needed.</p>
-            <p><span className="font-semibold text-ink">0% — no refund.</span> If the company refuses after all escalation steps, you pay nothing.</p>
+            {['fee15', 'fee20', 'fee0'].map((k) => {
+              const [bold, text] = t(`pricing.${k}`)
+              return <p key={k}><span className="font-semibold text-ink">{bold}</span> {text}</p>
+            })}
           </div>
         </div>
       </div>
