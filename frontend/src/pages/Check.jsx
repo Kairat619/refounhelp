@@ -25,8 +25,9 @@ export default function Check() {
 
   useEffect(() => {
     api.merchants().then((d) => {
-      setMerchants(d.items)
-      setForm((f) => ({ ...f, merchant_id: f.merchant_id || d.items[0]?.id }))
+      const items = d?.items ?? []
+      setMerchants(items)
+      setForm((f) => ({ ...f, merchant_id: f.merchant_id || items[0]?.id || '' }))
     }).catch(setError)
     api.issues().then(setIssues).catch(setError)
   }, [])

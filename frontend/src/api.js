@@ -11,12 +11,26 @@ function clientId() {
 }
 
 async function request(path, { method = 'GET', body } = {}) {
-  const res = await fetch(`${BASE}/api${path}`, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'X-Client-Id': clientId() },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  const data = await res.json().catch(() => ({}))
+  let res
+  try {
+    res = await fetch(`${BASE}/api${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-Client-Id': clientId() },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    throw new Error(`Cannot reach the RefundHelp API at ${BASE || window.location.origin}. Check that the backend is running and CORS allows this site.`)
+  }
+  // If the API URL is wrong (e.g. VITE_API_URL not set on Vercel), the request
+  // hits the SPA and returns index.html instead of JSON — fail loudly.
+  if (!(res.headers.get('content-type') || '').includes('application/json')) {
+    throw new Error(
+      BASE
+        ? `The API at ${BASE} did not return JSON (status ${res.status}). Check the VITE_API_URL value.`
+        : 'API not configured: set VITE_API_URL to the backend URL in Vercel and redeploy.',
+    )
+  }
+  const data = await res.json()
   if (!res.ok) {
     const d = data.detail
     const msg = Array.isArray(d) ? d.map((e) => e.msg).join('; ') : d || `Request failed (${res.status})`
